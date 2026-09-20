@@ -1,0 +1,3 @@
+CREATE POLICY "own device docs read" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'device-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "own device docs insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'device-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "own device docs delete" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'device-documents' AND (storage.foldername(name))[1] = auth.uid()::text);
