@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import {
+  animate,
   cubicBezier,
   type MotionValue,
   motion,
@@ -42,6 +43,20 @@ const HEADLINE = "Know what’s covered. Before it’s too late.".split(" ");
 // Scroll-linked values use the same curve as the timed entrance animations.
 function useEased(progress: MotionValue<number>, input: number[], output: number[]) {
   return useTransform(progress, input, output, { ease: EASE_FN });
+}
+
+// True on touch-first devices (phones, tablets), regardless of viewport width. Client-only, so the
+// server render and first client render both assume a mouse and it updates right after mount.
+function useCoarsePointer() {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const sync = () => setCoarse(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  return coarse;
 }
 
 function MagneticLink({ children, className }: { children: ReactNode; className?: string }) {
@@ -140,6 +155,7 @@ function DashboardScene({ compact = false }: { compact?: boolean }) {
 
 function HeroPreview() {
   const reduceMotion = useReducedMotion();
+  const coarse = useCoarsePointer();
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref);
   const rotateX = useMotionValue(3);
@@ -162,13 +178,27 @@ function HeroPreview() {
   // Slow autonomous drift (~11s / ~9s periods) layered over the pointer tilt, so the card
   // keeps breathing before the mouse moves. The spring smooths the jump when it re-enters view.
   useAnimationFrame((time) => {
-    if (reduceMotion || !inView) return;
+    if (reduceMotion || coarse || !inView) return;
     driftX.set(Math.sin(time / 1750) * 1.4);
     driftY.set(Math.sin(time / 1430) * 2);
   });
 
+  // Touch devices have no cursor to follow (and a tap fires a stray mousemove that would leave the
+  // card stuck tilted), so sweep it through roughly the same range a cursor would.
+  useEffect(() => {
+    if (!coarse || reduceMotion || !inView) return;
+    driftX.set(0);
+    driftY.set(0);
+    const sweepX = animate(rotateX, [null, 7, 3, -1, 3], { duration: 11, ease: "easeInOut", repeat: Infinity });
+    const sweepY = animate(rotateY, [null, -1, -6, -11, -6], { duration: 9, ease: "easeInOut", repeat: Infinity });
+    return () => {
+      sweepX.stop();
+      sweepY.stop();
+    };
+  }, [coarse, reduceMotion, inView, rotateX, rotateY, driftX, driftY]);
+
   const move = (event: MouseEvent<HTMLDivElement>) => {
-    if (reduceMotion) return;
+    if (reduceMotion || coarse) return;
     const rect = event.currentTarget.getBoundingClientRect();
     rotateY.set(((event.clientX - rect.left) / rect.width - 0.5) * 10);
     rotateX.set(-((event.clientY - rect.top) / rect.height - 0.5) * 8);
@@ -183,7 +213,7 @@ function HeroPreview() {
       className="relative mx-auto w-full max-w-[680px] lg:translate-x-[8%]"
       style={{ perspective: 1200 }}
       onMouseMove={move}
-      onMouseLeave={() => { rotateX.set(3); rotateY.set(-6); }}
+      onMouseLeave={() => { if (coarse) return; rotateX.set(3); rotateY.set(-6); }}
     >
       <motion.div style={{ rotateX: reduceMotion ? 0 : tiltX, rotateY: reduceMotion ? 0 : tiltY, transformStyle: "preserve-3d" }}>
         <div className="landing-preview-glow absolute inset-[8%] -z-10" />
@@ -243,52 +273,195 @@ const PAPERS = [
   { title: "INVOICE", line: "Sony Bravia OLED", icon: FileCheck2 },
 ];
 
-function ProblemSection() {
-  const target = useRef<HTMLElement>(null);
+type Paper = (typeof PAPERS)[number];
+
+function PaperFace({ title, line, icon: Icon }: Paper) {
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <Icon className="size-5 text-primary" />
+        <MoreHorizontal className="size-4 text-muted-foreground" />
+      </div>
+      <p className="mt-8 text-[10px] font-semibold text-muted-foreground">{title}</p>
+      <p className="mt-2 text-sm font-semibold">{line}</p>
+      <div className="mt-4 h-px bg-border" />
+      <div className="mt-3 h-1.5 w-3/4 rounded-full bg-muted" />
+      <div className="mt-2 h-1.5 w-1/2 rounded-full bg-muted" />
+    </>
+  );
+}
+
+const PROBLEM_COPIES = ["Receipts.", "Email.", "A drawer.", "Your memory."];
+
+// Wide screens (lg+): the receipts scatter and assemble while the section stays pinned.
+function ProblemPinned() {
+  const target = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target, offset: ["start end", "end start"] });
   const progress = useTransform(scrollYProgress, [0.18, 0.72], [0, 1]);
-  const copies = ["Receipts.", "Email.", "A drawer.", "Your memory."];
-  const starts = [{ x: -85, y: 30, r: -13 }, { x: 70, y: -45, r: 9 }, { x: -48, y: 95, r: 16 }, { x: 88, y: 92, r: -8 }];
+  const starts = [
+    { x: -85, y: 30, r: -13 },
+    { x: 70, y: -45, r: 9 },
+    { x: -48, y: 95, r: 16 },
+    { x: 88, y: 92, r: -8 },
+  ];
 
   return (
-    <section ref={target} id="problem" className="relative min-h-[150vh] border-y border-border px-5 py-28 md:px-10 lg:px-16">
-      <div className="sticky top-0 mx-auto grid min-h-screen max-w-[1320px] items-center gap-16 py-20 lg:grid-cols-[0.78fr_1.22fr]">
+    <div ref={target} className="relative hidden min-h-[150vh] px-16 py-28 lg:block">
+      <div className="sticky top-0 mx-auto grid min-h-screen-dvh max-w-[1320px] items-center gap-16 py-20 lg:grid-cols-[0.78fr_1.22fr]">
         <div>
-          <motion.p style={{ opacity: useEased(progress, [0, 0.15], [0.3, 1]) }} className="text-xs font-medium uppercase text-landing-amber">The problem</motion.p>
-          <h2 className="mt-6 text-4xl font-semibold leading-[1.02] md:text-6xl">Warranties end up everywhere.</h2>
+          <motion.p
+            style={{ opacity: useEased(progress, [0, 0.15], [0.3, 1]) }}
+            className="text-xs font-medium uppercase text-landing-amber"
+          >
+            The problem
+          </motion.p>
+          <h2 className="mt-6 text-4xl font-semibold leading-[1.02] md:text-6xl">
+            Warranties end up everywhere.
+          </h2>
           <div className="mt-8 space-y-1 text-2xl font-medium text-muted-foreground md:text-3xl">
-            {copies.map((copy, index) => (
-              <motion.p key={copy} style={reduceMotion ? {} : { opacity: useEased(progress, [index * 0.17, index * 0.17 + 0.18], [0.14, 1]), x: useEased(progress, [index * 0.17, index * 0.17 + 0.18], [-22, 0]) }}>{copy}</motion.p>
+            {PROBLEM_COPIES.map((copy, index) => (
+              <motion.p
+                key={copy}
+                style={
+                  reduceMotion
+                    ? {}
+                    : {
+                        opacity: useEased(progress, [index * 0.17, index * 0.17 + 0.18], [0.14, 1]),
+                        x: useEased(progress, [index * 0.17, index * 0.17 + 0.18], [-22, 0]),
+                      }
+                }
+              >
+                {copy}
+              </motion.p>
             ))}
           </div>
-          <motion.p style={reduceMotion ? {} : { opacity: useEased(progress, [0.72, 0.92], [0, 1]) }} className="mt-8 max-w-sm text-sm leading-6 text-foreground">Warrantify turns the mess into a record you can actually use.</motion.p>
+          <motion.p
+            style={reduceMotion ? {} : { opacity: useEased(progress, [0.72, 0.92], [0, 1]) }}
+            className="mt-8 max-w-sm text-sm leading-6 text-foreground"
+          >
+            Warrantify turns the mess into a record you can actually use.
+          </motion.p>
         </div>
         <div className="relative h-[480px]">
-          {PAPERS.map(({ title, line, icon: Icon }, index) => {
+          {PAPERS.map((paper, index) => {
             const col = index % 2;
             const row = Math.floor(index / 2);
             const start = starts[index] ?? { x: 0, y: 0, r: 0 };
             return (
               <motion.div
-                key={title}
-                style={reduceMotion ? { left: `${col * 50 + 2}%`, top: `${row * 45 + 4}%` } : {
-                  x: useEased(progress, [0, 1], [start.x, col * 245]),
-                  y: useEased(progress, [0, 1], [start.y, row * 205]),
-                  rotate: useEased(progress, [0, 1], [start.r, 0]),
-                  scale: useEased(progress, [0, 1], [0.92, 1]),
-                }}
+                key={paper.title}
+                style={
+                  reduceMotion
+                    ? { left: `${col * 50 + 2}%`, top: `${row * 45 + 4}%` }
+                    : {
+                        x: useEased(progress, [0, 1], [start.x, col * 245]),
+                        y: useEased(progress, [0, 1], [start.y, row * 205]),
+                        rotate: useEased(progress, [0, 1], [start.r, 0]),
+                        scale: useEased(progress, [0, 1], [0.92, 1]),
+                      }
+                }
                 className="absolute left-[8%] top-[8%] h-44 w-[min(42%,220px)] overflow-hidden rounded-lg border border-border bg-card p-5 shadow-xl"
               >
-                <div className="flex items-center justify-between"><Icon className="size-5 text-primary" /><MoreHorizontal className="size-4 text-muted-foreground" /></div>
-                <p className="mt-8 text-[10px] font-semibold text-muted-foreground">{title}</p>
-                <p className="mt-2 text-sm font-semibold">{line}</p>
-                <div className="mt-4 h-px bg-border" /><div className="mt-3 h-1.5 w-3/4 rounded-full bg-muted" /><div className="mt-2 h-1.5 w-1/2 rounded-full bg-muted" />
+                <PaperFace {...paper} />
               </motion.div>
             );
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Offsets are small on purpose: they must stay inside the 20px page gutter so no card is ever cut by the screen edge.
+const STACKED_STARTS = [
+  { x: -8, y: 28, r: -6 },
+  { x: 8, y: -20, r: 5 },
+  { x: -6, y: 44, r: 7 },
+  { x: 8, y: 48, r: -5 },
+];
+
+function StackedPaper({
+  paper,
+  index,
+  progress,
+  reduceMotion,
+}: {
+  paper: Paper;
+  index: number;
+  progress: MotionValue<number>;
+  reduceMotion: boolean;
+}) {
+  const start = STACKED_STARTS[index] ?? { x: 0, y: 0, r: 0 };
+  const x = useEased(progress, [0, 1], [start.x, 0]);
+  const y = useEased(progress, [0, 1], [start.y, 0]);
+  const rotate = useEased(progress, [0, 1], [start.r, 0]);
+  const scale = useEased(progress, [0, 1], [0.94, 1]);
+  const opacity = useEased(progress, [0, 0.5], [0.35, 1]);
+  return (
+    <motion.div
+      style={reduceMotion ? {} : { x, y, rotate, scale, opacity }}
+      className="h-44 overflow-hidden rounded-lg border border-border bg-card p-5 shadow-xl"
+    >
+      <PaperFace {...paper} />
+    </motion.div>
+  );
+}
+
+// Narrow screens: nothing is pinned. Copy reveals as it scrolls into view, and the receipts settle into a 2x2 grid that always fits.
+function ProblemStacked() {
+  const reduceMotion = useReducedMotion();
+  const board = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: board, offset: ["start end", "center center"] });
+  const reveal = (order: number) =>
+    reduceMotion
+      ? {}
+      : {
+          initial: { opacity: 0, x: -16 },
+          whileInView: { opacity: 1, x: 0 },
+          viewport: { once: true, amount: 0.6 },
+          transition: { duration: 0.7, delay: order * 0.08, ease: EASE },
+        };
+
+  return (
+    <div className="px-5 py-20 md:px-10 lg:hidden">
+      <p className="text-xs font-medium uppercase text-landing-amber">The problem</p>
+      <h2 className="mt-6 text-4xl font-semibold leading-[1.02] md:text-6xl">
+        Warranties end up everywhere.
+      </h2>
+      <div className="mt-8 space-y-1 text-2xl font-medium text-muted-foreground md:text-3xl">
+        {PROBLEM_COPIES.map((copy, index) => (
+          <motion.p key={copy} {...reveal(index)}>
+            {copy}
+          </motion.p>
+        ))}
+      </div>
+      <motion.p
+        {...reveal(PROBLEM_COPIES.length)}
+        className="mt-8 max-w-sm text-sm leading-6 text-foreground"
+      >
+        Warrantify turns the mess into a record you can actually use.
+      </motion.p>
+      <div ref={board} className="mt-14 grid grid-cols-2 gap-3 md:mx-auto md:max-w-xl md:gap-4">
+        {PAPERS.map((paper, index) => (
+          <StackedPaper
+            key={paper.title}
+            paper={paper}
+            index={index}
+            progress={scrollYProgress}
+            reduceMotion={!!reduceMotion}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProblemSection() {
+  return (
+    <section id="problem" className="relative border-y border-border">
+      <ProblemPinned />
+      <ProblemStacked />
     </section>
   );
 }
@@ -307,7 +480,7 @@ function ReminderScene() {
 
 function ClaimsScene() {
   const columns = [["Submitted", "Display flickering"],["Inspection", "Compressor noise"],["Ready", "Battery replacement"]];
-  return <div className="h-full rounded-lg border border-border bg-background p-5"><div className="flex justify-between"><div><p className="text-xs text-muted-foreground">CLAIMS</p><h3 className="mt-1 text-xl font-semibold">Repair progress, visible.</h3></div><Wrench className="text-primary"/></div><div className="mt-6 grid h-[70%] grid-cols-3 gap-3">{columns.map(([status,issue], index)=><div key={status} className="rounded-md bg-muted/50 p-2"><div className="flex items-center justify-between text-[10px] font-medium"><span>{status}</span><span className="text-muted-foreground">1</span></div><div className="landing-hover mt-3 rounded-md border border-border bg-card p-3 hover:border-primary/40"><span className={cn("mb-3 block h-1 w-8 rounded-full", index === 2 ? "bg-success" : "bg-primary")}/><p className="text-xs font-medium">{issue}</p><p className="mt-2 text-[9px] text-muted-foreground">Updated today</p></div></div>)}</div></div>;
+  return <div className="h-full rounded-lg border border-border bg-background p-5"><div className="flex justify-between"><div><p className="text-xs text-muted-foreground">CLAIMS</p><h3 className="mt-1 text-xl font-semibold">Repair progress, visible.</h3></div><Wrench className="text-primary"/></div><div className="mt-6 grid gap-3 sm:h-[70%] sm:grid-cols-3">{columns.map(([status,issue], index)=><div key={status} className="rounded-md bg-muted/50 p-2"><div className="flex items-center justify-between text-[10px] font-medium"><span>{status}</span><span className="text-muted-foreground">1</span></div><div className="landing-hover mt-3 rounded-md border border-border bg-card p-3 hover:border-primary/40"><span className={cn("mb-3 block h-1 w-8 rounded-full", index === 2 ? "bg-success" : "bg-primary")}/><p className="text-xs font-medium">{issue}</p><p className="mt-2 text-[9px] text-muted-foreground">Updated today</p></div></div>)}</div></div>;
 }
 
 const FEATURES = [
@@ -327,7 +500,7 @@ function FeatureShowcase() {
 
   return (
     <section ref={section} className="relative h-auto px-5 md:px-10 lg:h-[500vh] lg:px-16">
-      <div className="mx-auto max-w-[1380px] py-24 lg:sticky lg:top-0 lg:grid lg:min-h-screen lg:grid-cols-[0.78fr_1.22fr] lg:items-center lg:gap-20 lg:py-16">
+      <div className="mx-auto max-w-[1380px] py-24 lg:sticky lg:top-0 lg:grid lg:min-h-screen-dvh lg:grid-cols-[0.78fr_1.22fr] lg:items-center lg:gap-20 lg:py-16">
         <div className="hidden lg:block">
           <p className="mb-10 text-xs font-medium uppercase text-landing-amber">Built for the moment you need it</p>
           <div className="relative min-h-64">
@@ -339,7 +512,7 @@ function FeatureShowcase() {
           </div>
           <div className="mt-10 flex gap-2">{FEATURES.map((feature,index)=><span key={feature.kicker} className={cn("h-1 rounded-full transition-all duration-500 ease-(--ease-landing) motion-reduce:transition-none", active === index ? "w-12 bg-landing-amber" : "w-5 bg-muted")}/>)}</div>
         </div>
-        <div className="hidden h-[min(68vh,640px)] lg:block">
+        <div className="hidden h-[min(68vh,640px)] supports-[height:100dvh]:h-[min(68dvh,640px)] lg:block">
           <div className="relative h-full overflow-hidden rounded-lg border border-border bg-card p-3 shadow-2xl">
             {FEATURES.map((feature, index) => {
               const isActive = active === index;
@@ -421,5 +594,5 @@ function Footer() {
 }
 
 export function LandingPage() {
-  return <main className="landing-page relative min-h-screen overflow-clip bg-background text-foreground"><div className="landing-mesh pointer-events-none fixed inset-0" aria-hidden="true"/><Hero/><ProblemSection/><FeatureShowcase/><HowItWorks/><Stats/><ClosingCta/><Footer/></main>;
+  return <main className="landing-page relative min-h-screen-dvh overflow-clip bg-background text-foreground"><div className="landing-mesh pointer-events-none fixed inset-0" aria-hidden="true"/><Hero/><ProblemSection/><FeatureShowcase/><HowItWorks/><Stats/><ClosingCta/><Footer/></main>;
 }

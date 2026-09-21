@@ -160,6 +160,17 @@ html.light {
   }
 }
 
+/*
+ * The page uses overflow-clip so sticky sections keep working. Browsers without it (iOS < 16)
+ * would let a wide child scroll the page sideways, so fall back to hidden there. Sticky sections
+ * only exist at lg+, where these browsers are not a concern.
+ */
+@supports not (overflow: clip) {
+  .landing-page {
+    overflow-x: hidden;
+  }
+}
+
 .landing-mesh {
   z-index: 0;
   opacity: 0.42;
@@ -225,18 +236,33 @@ html.light {
   }
 }
 
-/* Hover feedback for the non-interactive mock UI on the landing page. */
+/*
+ * Full-viewport height that follows the mobile address bar (dvh), with a plain vh fallback.
+ * Use it for elements sized to fit the screen. Scroll runways (150vh, 500vh) stay in vh on
+ * purpose: a runway that changes length while the toolbar animates makes scroll progress jump.
+ */
+@utility min-h-screen-dvh {
+  min-height: 100vh;
+
+  @supports (min-height: 100dvh) {
+    min-height: 100dvh;
+  }
+}
+
+/* Hover feedback for the non-interactive mock UI on the landing page (hover-capable devices only). */
 @utility landing-hover {
   transition:
     transform 220ms var(--ease-landing, ease),
     box-shadow 220ms var(--ease-landing, ease),
     border-color 220ms var(--ease-landing, ease);
 
-  &:hover {
-    box-shadow: inset 0 0 0 999px color-mix(in oklab, var(--primary) 10%, transparent);
+  @media (hover: hover) {
+    &:hover {
+      box-shadow: inset 0 0 0 999px color-mix(in oklab, var(--primary) 10%, transparent);
+    }
   }
 
-  @media (prefers-reduced-motion: no-preference) {
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
     &:hover {
       transform: translateY(-2px);
     }
@@ -247,23 +273,26 @@ html.light {
   position: relative;
   isolation: isolate;
 
-  &::before {
-    content: "";
-    position: absolute;
-    inset: -3px -6px;
-    z-index: -1;
-    border-radius: 6px;
-    background: color-mix(in oklab, var(--primary) 12%, transparent);
-    opacity: 0;
-    transition: opacity 220ms var(--ease-landing, ease);
-    pointer-events: none;
+  /* Only where hover exists: on touch the extended highlight would just add invisible overflow. */
+  @media (hover: hover) {
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -3px -6px;
+      z-index: -1;
+      border-radius: 6px;
+      background: color-mix(in oklab, var(--primary) 12%, transparent);
+      opacity: 0;
+      transition: opacity 220ms var(--ease-landing, ease);
+      pointer-events: none;
+    }
+
+    &:hover::before {
+      opacity: 1;
+    }
   }
 
-  &:hover::before {
-    opacity: 1;
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
     transition: transform 220ms var(--ease-landing, ease);
 
     &:hover {
