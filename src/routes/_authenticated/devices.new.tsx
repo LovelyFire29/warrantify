@@ -153,7 +153,10 @@ function RegisterDevicePage() {
 
   const addFiles = (incoming: FileList | null) => {
     if (!incoming?.length) return;
-    setFiles((prev) => [...prev, ...Array.from(incoming)]);
+    // Copy now: `input.files` is a live list that Chromium empties when the input is reset
+    // (the file picker does that right after calling us), and the updater below runs later.
+    const picked = Array.from(incoming);
+    setFiles((prev) => [...prev, ...picked]);
   };
 
   /** Placeholder extraction — real invoice parsing gets wired up separately. */
@@ -191,8 +194,14 @@ function RegisterDevicePage() {
     register.mutate(
       { ...form, files },
       {
-        onSuccess: (deviceId) => {
+        onSuccess: ({ deviceId, failedFiles }) => {
           toast.success(`${form.name.trim()} registered.`);
+          if (failedFiles.length > 0) {
+            toast.error(
+              `${failedFiles.length === 1 ? failedFiles[0] : `${failedFiles.length} files`} couldn't be uploaded.`,
+              { description: "You can add files from the Documents tab on the device page." },
+            );
+          }
           navigate({ to: "/devices/$deviceId", params: { deviceId } });
         },
         onError: (error) =>

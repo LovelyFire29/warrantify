@@ -76,18 +76,28 @@ export function useRegisterDevice() {
         if (warrantyError) throw warrantyError;
       }
 
+      // The device is already saved, so a failed file doesn't abort registration; report it instead.
+      const failedFiles: string[] = [];
       for (const file of input.files) {
         const path = `${userId}/${device.id}/${Date.now()}-${file.name.replace(/[^\w.\-]+/g, "_")}`;
         const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file);
-        if (uploadError) continue;
-        await supabase.from("documents").insert({
+        if (uploadError) {
+          console.error("[upload] storage upload failed", file.name, uploadError);
+          failedFiles.push(file.name);
+          continue;
+        }
+        const { error: documentError } = await supabase.from("documents").insert({
           device_id: device.id,
           type: /invoice|receipt|bill/i.test(file.name) ? "invoice" : "other",
           file_url: path,
         });
+        if (documentError) {
+          console.error("[upload] could not record document", file.name, documentError);
+          failedFiles.push(file.name);
+        }
       }
 
-      return device.id;
+      return { deviceId: device.id, failedFiles };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["devices"] });
