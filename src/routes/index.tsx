@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureAccountReady } from "@/lib/seed-data";
+import { ensureAccountReady } from "@/lib/account-setup";
 import { LandingPage } from "@/components/landing-page";
 
 export const Route = createFileRoute("/")({

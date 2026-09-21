@@ -245,7 +245,7 @@ function RegisterDevicePage() {
             variant="ghost"
             onClick={() => aiInput.current?.click()}
             className={cn(
-              "h-auto w-full justify-start gap-4 rounded-lg border border-dashed border-accent/50 bg-accent/5 p-4 text-left hover:border-accent hover:bg-accent/10",
+              "h-auto w-full justify-start gap-4 whitespace-normal rounded-lg border border-dashed border-accent/50 bg-accent/5 p-4 text-left hover:border-accent hover:bg-accent/10",
               aiDragging && "border-accent bg-accent/15",
             )}
           >

@@ -1,39 +1,15 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, MonitorSmartphone, FileText, Wrench, Bell, Settings, LogOut, ShieldCheck } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Link } from "@tanstack/react-router";
+import { LogOut, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NAV, getInitials, useSignOut } from "@/components/app-nav";
 
-const NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/devices", label: "Devices", icon: MonitorSmartphone },
-  { to: "/documents", label: "Documents", icon: FileText },
-  { to: "/claims", label: "Claims", icon: Wrench },
-  { to: "/notifications", label: "Notifications", icon: Bell },
-  { to: "/settings", label: "Settings", icon: Settings },
-] as const;
-
+// Persistent sidebar: desktop and tablet only (768px and up). Phones use the drawer in mobile-nav.tsx.
 export function AppSidebar({ name, email }: { name: string; email: string }) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  async function signOut() {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
-  }
-
-  const initials = name
-    .split(" ")
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const signOut = useSignOut();
+  const initials = getInitials(name);
 
   return (
-    <aside className="sticky top-0 flex h-screen w-16 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:w-60">
+    <aside className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex md:w-60">
       <div className="flex items-center gap-2 px-3 py-5 md:px-5">
         <span className="flex size-9 items-center justify-center rounded-md bg-primary/20 text-primary">
           <ShieldCheck className="size-5" />

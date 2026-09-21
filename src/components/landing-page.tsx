@@ -123,7 +123,7 @@ function DashboardScene({ compact = false }: { compact?: boolean }) {
       <div className="pt-4">
         <p className="text-[10px] text-muted-foreground">SATURDAY, 19 SEPTEMBER</p>
         <div className="mt-1 flex items-end justify-between gap-3">
-          <div><h3 className="text-lg font-semibold">Good evening, Srujana.</h3><p className="text-[10px] text-muted-foreground">Your household coverage at a glance.</p></div>
+          <div><h3 className="text-lg font-semibold">Good evening, Nishanth.</h3><p className="text-[10px] text-muted-foreground">Your household coverage at a glance.</p></div>
           <span className="rounded-md bg-primary px-2.5 py-1.5 text-[9px] font-medium text-primary-foreground">+ Register device</span>
         </div>
         <div className="mt-4 grid grid-cols-4 gap-2">

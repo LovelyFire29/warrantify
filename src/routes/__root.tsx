@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
+import { RouteRetryBoundary } from "@/components/route-retry-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -148,7 +149,9 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <RouteRetryBoundary>
+        <Outlet />
+      </RouteRetryBoundary>
       <Toaster />
     </QueryClientProvider>
   );

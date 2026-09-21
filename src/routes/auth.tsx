@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureAccountReady } from "@/lib/seed-data";
+import { ensureAccountReady } from "@/lib/account-setup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,8 +68,7 @@ function AuthPage() {
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        // First confirmed sign-in of a brand-new account: create the profile row
-        // and its starter content (only ever once, never on page load).
+        // First sign-in of a brand-new account: create its (empty) profile row.
         if (data.user) await ensureAccountReady(data.user.id, data.user.email ?? email, name);
         navigate({ to: "/dashboard", replace: true });
       }
@@ -114,7 +113,7 @@ function AuthPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             {mode === "signin"
               ? "Sign in to see your warranty coverage."
-              : "We'll set up your household with a few sample devices."}
+              : "Start tracking the devices and warranties in your home."}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
